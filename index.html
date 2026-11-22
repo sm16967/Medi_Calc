@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MediCalc – Clinical Calculators</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Chakra+Petch:wght@600;700&display=swap">
+
+<style>
+
+:root {
+  --bg: #FFF8F6;  --card: #FFFFFF;  --ink: #0B2B3B;  --mute: #5B7280;
+  --line: #D9E4E8;  --soft: #E6F3F3;
+  --brand: #0F8B8D;  --brand2: #0B6B6D;
+  --ok: #1E9E62;  --warn: #D98A00;  --bad: #D6432B;
+  --g1: rgba(214,67,43,.17);  --g2: rgba(214,67,43,.07);   /* ECG paper grid */
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+:root[data-theme="dark"] {
+  --bg: #081A22;  --card: #0F2630;  --ink: #E7F1F4;  --mute: #8FA7B2;
+  --line: #1D3A46;  --soft: #123642;
+  --brand: #2FC4C6;  --brand2: #5FD8D9;
+  --ok: #3CCB86;  --warn: #F0B03A;  --bad: #FF6E55;
+  --g1: rgba(47,196,198,.13);  --g2: rgba(47,196,198,.055);
+}
+
+/* 2. BASE */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  background-color: var(--bg);
+  /* ECG paper: big squares every 100px, small squares every 20px */
+  background-image:
+    linear-gradient(var(--g1) 1px, transparent 1px), linear-gradient(90deg, var(--g1) 1px, transparent 1px),
+    linear-gradient(var(--g2) 1px, transparent 1px), linear-gradient(90deg, var(--g2) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  color: var(--ink);
+  font-family: Manrope, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.brand, .panel h2, .modal h3 { font-family: "Chakra Petch", Manrope, system-ui, sans-serif; }
+
+/* 3. OPENING SPLASH (heartbeat line draws, then the title appears) */
+#splash { position: fixed; inset: 0; z-index: 9; background: #071E28; display: grid; place-items: center; cursor: pointer; transition: opacity .7s, visibility .7s; }
+#splash.out { opacity: 0; visibility: hidden; }
+.splash-box { text-align: center; color: #E7F6F7; padding: 20px; }
+.splash-box svg { width: min(560px, 90vw); height: auto; overflow: visible; }
+.ecg-line { fill: none; stroke: #2FE0C8; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: draw 2s ease-out .2s forwards; filter: drop-shadow(0 0 6px #2FE0C8); }
+.ecg-dot { fill: #fff; opacity: 0; animation: show .1s 2.1s forwards; }
+.splash-box h1 { font-family: "Chakra Petch", sans-serif; font-size: clamp(2rem, 7vw, 3.2rem); margin: .2em 0 0; letter-spacing: -.02em; opacity: 0; animation: rise .8s 1.5s forwards; }
+.splash-box p { margin: .3em 0 0; color: #8CC3C8; opacity: 0; animation: rise .8s 1.9s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes show { to { opacity: 1; } }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* 4. HEADER & LAYOUT */
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px clamp(16px, 4vw, 40px); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.3rem; }
+.brand i { width: 36px; height: 36px; border-radius: 10px; background: var(--brand); display: grid; place-items: center; }
+.brand svg { width: 22px; height: 22px; }
+.header-buttons { display: flex; gap: 8px; }
+.top-btn { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+.help-btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.help-btn b { width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: .85rem; }
+footer { max-width: 1150px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px) 28px; font-size: .8rem; color: var(--mute); }
+
+/* 5. CALCULATOR FORM */
+.panel { background: var(--card); border: 1px solid var(--line); border-top: 5px solid var(--brand); border-radius: 10px; padding: clamp(18px, 3vw, 32px); }
+.panel h2 { margin: 0; font-size: 1.7rem; }
+.panel .sub { color: var(--mute); margin: 4px 0 20px; padding-bottom: 12px; border-bottom: 1.5px dashed var(--line); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.field { position: relative; }
+label { display: block; font-weight: 700; font-size: .88rem; margin-bottom: 5px; }
+.field input, .field select { width: 100%; padding: 12px 52px 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); font-size: 1rem; }
+.field select { padding-right: 14px; }
+.field input:focus, .field select:focus { border-color: var(--brand); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 25%, transparent); }
+.unit { position: absolute; right: 14px; bottom: 13px; color: var(--mute); font-size: .82rem; pointer-events: none; }
+.buttons { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.go { background: var(--brand); color: #fff; border: 0; border-radius: 12px; padding: 13px 26px; font-weight: 800; cursor: pointer; transition: transform .15s, background .2s; }
+:root[data-theme="dark"] .go { color: #04242A; }
+.go:hover { background: var(--brand2); }
+.go:active { transform: scale(.97); }
+.clear { background: transparent; border: 1.5px solid var(--line); border-radius: 12px; padding: 13px 20px; cursor: pointer; }
+.error { color: var(--bad); font-weight: 600; margin-top: 14px; }
+
+/* 6. RESULT – styled like a bedside patient monitor */
+.res { --ok: #3CCB86; --warn: #F0B03A; --bad: #FF6E55;   /* brighter colours on the dark screen */
+  position: relative; overflow: hidden; margin-top: 24px; padding: 22px 24px;
+  background: #04141B; color: #E7F1F4; border: 1px solid #16323E; border-left: 8px solid var(--c); border-radius: 10px;
+  animation: pop .45s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.big { position: relative; font-family: "Chakra Petch", Manrope, sans-serif; font-size: clamp(2.4rem, 8vw, 3.6rem); font-weight: 700; line-height: 1; color: var(--c); text-shadow: 0 0 22px color-mix(in srgb, var(--c) 55%, transparent); }
+.big small { font-size: 1rem; color: #8FA7B2; margin-left: 6px; text-shadow: none; }
+.tag { position: relative; display: inline-block; margin-top: 10px; padding: 4px 12px; border: 1.5px solid var(--c); border-radius: 99px; color: var(--c); font-weight: 800; font-size: .9rem; }
+.res ul { position: relative; margin: 14px 0 0; padding-left: 18px; color: #9FB6C0; }
+.res li b { color: #E7F1F4; }
+.trace { position: absolute; right: 16px; top: 14px; width: 40%; max-width: 260px; pointer-events: none; }
+.trace path { fill: none; stroke: var(--c); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.trace .base { opacity: .22; }
+.trace .sweep { stroke-dasharray: 24 76; stroke-dashoffset: 100; animation: sweep 2.6s linear infinite; filter: drop-shadow(0 0 4px var(--c)); }
+@keyframes sweep { to { stroke-dashoffset: 0; } }
+.bar { position: relative; height: 12px; border-radius: 99px; margin: 20px 4px 6px; background: linear-gradient(90deg, #F0B03A 0 16%, #3CCB86 16% 40%, #F0B03A 40% 60%, #E8734A 60% 80%, #D6432B 80%); }
+.bar i { position: absolute; top: -6px; width: 6px; height: 24px; border-radius: 4px; background: #fff; transform: translateX(-3px); transition: left .8s cubic-bezier(.2,.9,.3,1); }
+.bar-labels { display: flex; justify-content: space-between; font-size: .72rem; color: #8FA7B2; margin: 0 4px; }
+
+/* 7. ADVICE, FORMULA & LIMITATIONS */
+.advice { margin-top: 16px; padding: 16px 18px; border: 1px solid var(--line); border-left: 6px solid var(--brand); border-radius: 10px; background: var(--bg); }
+.advice h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.source { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 10px; border-radius: 99px; background: var(--soft); color: var(--brand2); }
+:root[data-theme="dark"] .source { color: var(--brand); }
+.advice ul { margin: 10px 0 0; padding-left: 20px; }
+.advice li { margin: 5px 0; }
+.advice .disclaimer { margin: 12px 0 0; font-size: .8rem; color: var(--mute); }
+.formula { margin-top: 16px; font-size: .82rem; color: var(--mute); background: var(--soft); padding: 10px 14px; border-radius: 10px; }
+.limits { margin-top: 12px; font-size: .84rem; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.limits ul { margin: 4px 0 0; padding-left: 18px; }
+.limits li { margin: 2px 0; }
+.check { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--mute); }
+
+/* 8. HELP WINDOW */
+#help-window, #hist-window { position: fixed; inset: 0; z-index: 8; background: rgba(5,20,27,.6); display: none; align-items: center; justify-content: center; padding: 16px; }
+#help-window.open, #hist-window.open { display: flex; animation: fade .25s; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.modal { background: var(--card); border: 1px solid var(--line); border-radius: 18px; max-width: 640px; width: 100%; max-height: 88vh; overflow: auto; padding: clamp(18px, 3vw, 30px); animation: pop .35s cubic-bezier(.2,.9,.3,1.2); }
+.modal h3 { margin: 0 0 4px; font-size: 1.4rem; }
+.modal h4 { margin: 18px 0 6px; }
+.modal ol, .modal ul { margin: 0; padding-left: 20px; }
+.modal li { margin: 5px 0; }
+.modal .close { float: right; border: 1px solid var(--line); background: transparent; border-radius: 10px; padding: 6px 12px; cursor: pointer; }
+.modal .note { background: var(--soft); border-radius: 10px; padding: 10px 14px; margin-top: 16px; font-size: .88rem; color: var(--mute); }
+
+/* 8b. RESULT ACTIONS, HISTORY & PRINT */
+.header-buttons { flex-wrap: wrap; justify-content: flex-end; }
+.result-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.result-actions span { font-size: .85rem; color: var(--mute); }
+.hist { list-style: none; padding: 0; margin: 12px 0 0; }
+.hist li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0 10px 12px; margin-bottom: 8px; border-left: 6px solid var(--line); background: var(--bg); border-radius: 6px; }
+.hist small { display: block; color: var(--mute); }
+@media print {
+  header, #home, footer, .back, .buttons, .formula, .limits, .result-actions, #splash, #help-window, #hist-window { display: none !important; }
+  body { background: #fff; }
+  main { display: block; padding: 0; }
+  .panel { border: 0; padding: 0; }
+  .res { background: #fff; color: #000; border-color: #000; }
+  .big, .tag, .res ul, .res li b { color: #000; text-shadow: none; }
+  .trace { display: none; }
+}
+
+/* 8c. HOME SCREEN, POLISH & TEXT SIZE */
+[hidden] { display: none !important; }
+:root[data-size="1"] { font-size: 112.5%; }
+:root[data-size="2"] { font-size: 125%; }
+a.brand { color: inherit; text-decoration: none; }
+main { max-width: 920px; margin: 0 auto; padding: 8px clamp(16px, 4vw, 40px) 32px; }
+.hero { padding: 8px 0 4px; }
+.hero h1 { font-family: "Chakra Petch", Manrope, sans-serif; font-size: clamp(1.7rem, 5vw, 2.5rem); line-height: 1.15; margin: 0 0 8px; letter-spacing: -.01em; }
+.hero p { margin: 0 0 16px; color: var(--mute); max-width: 56ch; }
+.search { width: 100%; max-width: 560px; min-height: 52px; padding: 14px 18px; font-size: 1rem; border: 1.5px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: 0 2px 8px rgba(11,43,59,.06); }
+.search:focus { border-color: var(--brand); outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 22%, transparent); }
+.cat-title { display: flex; align-items: center; gap: 10px; margin: 28px 0 12px; font-size: 1.05rem; }
+.cat-title::before { content: ""; width: 6px; height: 22px; border-radius: 3px; background: var(--cat); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.card { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px; padding: 12px 16px; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 14px; cursor: pointer; box-shadow: 0 1px 2px rgba(11,43,59,.06); transition: transform .15s, box-shadow .15s, border-color .15s; }
+.card:hover { transform: translateY(-2px); border-color: var(--cat); box-shadow: 0 10px 24px rgba(11,43,59,.12); }
+.card b { display: block; }
+.card small { display: block; color: var(--mute); font-size: .82rem; }
+.badge { flex: 0 0 auto; min-width: 54px; height: 54px; padding: 0 6px; border-radius: 12px; display: grid; place-items: center; background: var(--cat); color: #fff; font-family: "Chakra Petch", sans-serif; font-weight: 700; font-size: .9rem; }
+.no-results { color: var(--mute); margin-top: 24px; }
+.back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: -6px 0 10px; padding: 8px 14px; background: transparent; border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; font-weight: 700; }
+.back:hover { background: var(--soft); }
+.panel { box-shadow: 0 2px 6px rgba(11,43,59,.05), 0 14px 34px rgba(11,43,59,.07); }
+.field input, .field select { min-height: 50px; }
+.go, .clear, .top-btn { min-height: 46px; }
+footer b { color: var(--ink); }
+
+/* 9. MOBILE & REDUCED MOTION */
+@media (max-width: 520px) { .trace { width: 34%; opacity: .7; } }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01s !important; animation-delay: 0s !important; transition: none !important; }
+  .trace .sweep { animation: none !important; stroke-dasharray: none; stroke-dashoffset: 0; }
+}
+</style>
+</head>
+
+<body>
+
+<div id="splash" role="presentation" title="Tap to skip">
+  <div class="splash-box">
+    <svg viewBox="0 0 560 120" aria-hidden="true">
+      <path class="ecg-line" d="M0 70 H150 L170 70 L190 30 L215 105 L240 10 L262 70 H330 C345 70 350 52 365 52 C380 52 385 70 400 70 H560"/>
+      <circle class="ecg-dot" cx="560" cy="70" r="5"/>
+    </svg>
+    <h1>MediCalc</h1>
+    <p>Evidence-based clinical calculators</p>
+  </div>
+</div>
+
+<header>
+  <a class="brand" href="#" aria-label="MediCalc home">
+    <i><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h5l3-7 4 14 3-7h5"/></svg></i>
+    MediCalc
+  </a>
+  <div class="header-buttons">
+    <button class="top-btn" id="hist-btn" aria-haspopup="dialog">My results</button>
+    <button class="top-btn help-btn" id="help-btn" aria-haspopup="dialog"><b>?</b>How to use</button>
+    <button class="top-btn" id="size-btn" aria-label="Change text size">Aa</button>
+    <button class="top-btn" id="theme-btn" aria-label="Switch between light and dark theme">Theme</button>
+  </div>
+</header>
+
+<main>
+  <!-- Home screen: search and calculator cards -->
+  <section id="home">
+    <div class="hero">
+      <h1>What would you like to calculate?</h1>
+      <p>Simple clinical calculators with plain-language advice. Pick one below, or search.</p>
+      <input class="search" id="search" type="search" placeholder="Search, for example BMI, kidney or pregnancy" aria-label="Search calculators" autocomplete="off">
+    </div>
+    <div id="cats"></div>
+  </section>
+  <!-- Calculator screen -->
+  <section class="panel" id="panel" aria-live="polite" hidden></section>
+</main>
+
+<footer><b>In an emergency, call your local emergency number.</b> For education and clinical support only. Results and advice do not replace professional judgement or a medical consultation; always verify against local protocols and the patient's full clinical picture.</footer>
+
+<!-- ===== HELP WINDOW ===== -->
+<div id="help-window" role="dialog" aria-modal="true" aria-labelledby="help-title">
+  <div class="modal">
+    <button class="close" id="help-close">Close</button>
+    <h3 id="help-title">How to use MediCalc</h3>
+    <p style="margin:0;color:var(--mute)">Get a clinical result in four steps.</p>
+    <h4>Step by step</h4>
+    <ol>
+      <li><b>Pick a calculator</b> on the home screen, or type in the search box. Use "← All calculators" to come back.</li>
+      <li><b>Enter the values.</b> Each box shows its unit and allowed range. Choose sex or activity level from the lists.</li>
+      <li><b>Press Calculate.</b> Green is normal, amber is borderline, red needs attention.</li>
+      <li><b>Read the advice</b> under the result. It says whether it is based on WHO guidance or general clinical guidance.</li>
+    </ol>
+    <h4>Which calculator should I use?</h4>
+    <ul>
+      <li><b>BMI:</b> weight status for adults.</li>
+      <li><b>Body surface area:</b> drug and chemotherapy dosing.</li>
+      <li><b>BMR and daily energy:</b> calories needed per day.</li>
+      <li><b>Ideal body weight:</b> ventilator and drug dosing.</li>
+      <li><b>Mean arterial pressure:</b> blood flow to organs from a BP reading.</li>
+      <li><b>eGFR and creatinine clearance:</b> kidney function.</li>
+      <li><b>Corrected calcium:</b> calcium adjusted for low albumin.</li>
+      <li><b>Anion gap:</b> helps find the cause of acidosis.</li>
+      <li><b>Waist-to-hip ratio:</b> fat around the waist.</li>
+      <li><b>HbA1c:</b> average blood sugar over 3 months.</li>
+      <li><b>Pregnancy due date:</b> due date and weeks of pregnancy.</li>
+      <li><b>QTc:</b> heart rhythm safety on an ECG.</li>
+      <li><b>CHA₂DS₂-VASc:</b> stroke risk in atrial fibrillation.</li>
+      <li><b>Unit converter:</b> kg and lb, cm and inches, lab units.</li>
+    </ul>
+    <h4>Handy features</h4>
+    <ul>
+      <li><b>My results</b> keeps your last 30 results on this device.</li>
+      <li><b>Print or save as PDF</b> and <b>Copy summary</b> appear under each result.</li>
+      <li><b>Aa</b> makes the text larger. <b>Theme</b> switches light and dark.</li>
+    </ul>
+    <div class="note">MediCalc supports learning and clinical work. It does not diagnose, and it does not replace a doctor. Always check results against local protocols.</div>
+  </div>
+</div>
+
+<!-- ===== MY RESULTS WINDOW ===== -->
+<div id="hist-window" role="dialog" aria-modal="true" aria-labelledby="hist-title">
+  <div class="modal">
+    <button class="close" id="hist-close">Close</button>
+    <h3 id="hist-title">My results</h3>
+    <p style="margin:0;color:var(--mute)">Your last 30 results. They are saved only on this device.</p>
+    <ul class="hist" id="hist-list"></ul>
+    <div class="buttons"><button class="clear" id="hist-clear" type="button">Clear history</button></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+
+const $ = (selector) => document.querySelector(selector);   // short name for finding an element
+
+
+// number(...) makes a number box, choice(...) makes a drop-down list
+const number = (id, label, unit, min, max, step = 'any') => ({ id, label, unit, min, max, step });
+const choice = (id, label, options) => ({ id, label, options });
+const dateField = (id, label) => ({ id, label, type: 'date' });          // a date picker
+const yesNo = (id, label) => choice(id, label, [['0', 'No'], ['1', 'Yes']]);
+
+const SEX    = choice('sex', 'Sex', [['m', 'Male'], ['f', 'Female']]);
+const AGE    = number('age', 'Age', 'years', 18, 120, 1);
+const HEIGHT = number('h', 'Height', 'cm', 50, 250);
+const WEIGHT = number('w', 'Weight', 'kg', 2, 400);
+
+/* ---------- 3. CALCULATORS ----------
+   Each calculator has:
+   id, name, sub        – names shown on screen
+   fields               – the boxes the user fills in
+   formula, limits, check – text shown under the form
+   run(v)               – does the maths; v holds the numbers typed in.
+                          It returns: value, decimals, unit, category,
+                          tone (ok / warn / bad), key (picks the advice), extras */
+const CALCULATORS = [
+
+  { id: 'bmi', name: 'BMI', sub: 'Body mass index',
+    fields: [HEIGHT, WEIGHT],
+    formula: 'BMI = weight (kg) ÷ height (m)². WHO adult classification.',
+    limits: ['Adults (18+) only. Children and teenagers need age and sex percentile charts.',
+             'Does not separate fat from muscle, so athletes and people with oedema can be misclassified.',
+             'Not valid in pregnancy. Health risk may begin at a lower BMI (about 23) in some Asian populations.'],
+    check: '175 cm and 70 kg gives 22.9',
+    run(v) {
+      const m = v.h / 100;
+      const bmi = v.w / (m * m);
+      let category, tone, key;
+      if (bmi < 18.5)      { category = 'Underweight';      tone = 'warn'; key = 'under'; }
+      else if (bmi < 25)   { category = 'Normal weight';    tone = 'ok';   key = 'normal'; }
+      else if (bmi < 30)   { category = 'Overweight';       tone = 'warn'; key = 'over'; }
+      else if (bmi < 35)   { category = 'Obesity class I';  tone = 'bad';  key = 'obese'; }
+      else if (bmi < 40)   { category = 'Obesity class II'; tone = 'bad';  key = 'obese'; }
+      else                 { category = 'Obesity class III'; tone = 'bad'; key = 'obese'; }
+      return { value: bmi, decimals: 1, unit: 'kg/m²', category, tone, key, bar: bmi,
+               extras: [`Healthy weight range for this height: <b>${(18.5 * m * m).toFixed(1)} – ${(24.9 * m * m).toFixed(1)} kg</b>`] };
+    } },
+
+  { id: 'bsa', name: 'Body surface area', sub: 'Mosteller & Du Bois',
+    fields: [HEIGHT, WEIGHT],
+    formula: 'Mosteller: √(height cm × weight kg ÷ 3600). Du Bois: 0.007184 × W^0.425 × H^0.725.',
+    limits: ['An estimate. Mosteller and Du Bois can differ by a few percent.',
+             'Less accurate in very small children and at extremes of height or weight.',
+             'Many oncology centres cap or adjust BSA for dosing. Follow local protocol.'],
+    check: '170 cm and 70 kg gives 1.82 m² (Mosteller)',
+    run(v) {
+      const mosteller = Math.sqrt(v.h * v.w / 3600);
+      const duBois = 0.007184 * Math.pow(v.w, 0.425) * Math.pow(v.h, 0.725);
+      return { value: mosteller, decimals: 2, unit: 'm²', category: 'Mosteller', tone: 'ok', key: 'info',
+               extras: [`Du Bois: <b>${duBois.toFixed(2)} m²</b>`, 'Typical adult average: about 1.7 m²'] };
+    } },
+
+  { id: 'bmr', name: 'BMR & daily energy', sub: 'Mifflin-St Jeor',
+    fields: [SEX, AGE, HEIGHT, WEIGHT,
+             choice('act', 'Activity level', [['1.2', 'Sedentary'], ['1.375', 'Light (1–3 days/week)'],
+               ['1.55', 'Moderate (3–5 days/week)'], ['1.725', 'Very active (6–7 days/week)'], ['1.9', 'Extra active / physical job']])],
+    formula: 'BMR = 10 × kg + 6.25 × cm − 5 × age + 5 (male) or − 161 (female). Daily energy = BMR × activity factor.',
+    limits: ['An estimate, usually within about 10% of measured values.',
+             'Not validated in pregnancy, the very elderly or extreme obesity.',
+             'Activity factors are approximate, and weight-change targets need individual assessment.'],
+    check: 'Male, 30 years, 175 cm, 70 kg gives BMR 1649 kcal/day',
+    run(v) {
+      const bmr = 10 * v.w + 6.25 * v.h - 5 * v.age + (v.sex === 'm' ? 5 : -161);
+      const tdee = bmr * parseFloat(v.act);
+      return { value: bmr, decimals: 0, unit: 'kcal/day', category: 'Basal metabolic rate', tone: 'ok', key: 'info',
+               extras: [`Daily energy to maintain weight: <b>${Math.round(tdee)} kcal/day</b>`] };
+    } },
+
+  { id: 'ibw', name: 'Ideal body weight', sub: 'Devine formula',
+    fields: [SEX, HEIGHT, WEIGHT],
+    formula: 'Devine: male 50 kg + 2.3 kg per inch over 60 in; female 45.5 kg + 2.3 kg per inch over 60 in.',
+    limits: ['Valid for height of 152.4 cm (60 in) or more, and for adults only.',
+             'Derived from older population data, so it may not suit every ethnic group or body build.',
+             'Adjusted weight (0.4 rule) is a common convention, not a universal standard.'],
+    check: 'Male, 175 cm gives 70.5 kg',
+    run(v) {
+      const inches = v.h / 2.54;
+      if (inches < 60) return { error: 'The Devine formula applies to a height of 152.4 cm (60 in) or more.' };
+      const ibw = (v.sex === 'm' ? 50 : 45.5) + 2.3 * (inches - 60);
+      return { value: ibw, decimals: 1, unit: 'kg', category: 'Ideal body weight', tone: 'ok', key: 'info',
+               extras: [`Actual weight is <b>${Math.round(v.w / ibw * 100)}%</b> of ideal`,
+                        `Adjusted body weight (0.4 rule): <b>${(ibw + 0.4 * (v.w - ibw)).toFixed(1)} kg</b>`] };
+    } },
+
+  { id: 'map', name: 'Mean arterial pressure', sub: 'Blood pressure',
+    fields: [number('sbp', 'Systolic BP', 'mmHg', 40, 300, 1), number('dbp', 'Diastolic BP', 'mmHg', 20, 200, 1)],
+    formula: 'MAP = (SBP + 2 × DBP) ÷ 3. Pulse pressure = SBP − DBP.',
+    limits: ['An estimate that assumes a normal heart rate. It is less accurate at very fast or slow rates.',
+             'In critically ill patients, invasive arterial measurement is preferred.',
+             'Targets vary by patient. 65 mmHg or above is a common goal in shock.'],
+    check: '120/80 mmHg gives MAP 93',
+    run(v) {
+      if (v.sbp <= v.dbp) return { error: 'Systolic pressure must be higher than diastolic pressure.' };
+      const map = (v.sbp + 2 * v.dbp) / 3;
+      let category, tone, key;
+      if (map < 60)        { category = 'Low – risk of poor organ perfusion'; tone = 'bad';  key = 'low'; }
+      else if (map < 70)   { category = 'Borderline low';                     tone = 'warn'; key = 'borderline'; }
+      else if (map <= 100) { category = 'Normal';                             tone = 'ok';   key = 'normal'; }
+      else                 { category = 'Elevated';                           tone = 'warn'; key = 'high'; }
+      return { value: map, decimals: 0, unit: 'mmHg', category, tone, key,
+               extras: [`Pulse pressure: <b>${Math.round(v.sbp - v.dbp)} mmHg</b> (normal about 40)`, 'Normal MAP range: 70 – 100 mmHg'] };
+    } },
+
+  { id: 'egfr', name: 'eGFR', sub: 'CKD-EPI 2021',
+    fields: [SEX, AGE, number('scr', 'Serum creatinine', 'mg/dL', 0.1, 20)],
+    formula: 'CKD-EPI 2021 (race-free): 142 × min(Scr/κ,1)^α × max(Scr/κ,1)^−1.200 × 0.9938^age × 1.012 if female. κ = 0.7 (F) / 0.9 (M); α = −0.241 (F) / −0.302 (M).',
+    limits: ['Adults (18+) only. Assumes stable kidney function, so it is invalid in acute kidney injury.',
+             'Less accurate with very high or low muscle mass, amputation, creatine supplements or unusual diets. Cystatin C can help confirm.',
+             'Enter creatinine in mg/dL (divide µmol/L by 88.4).'],
+    check: 'Male, 40 years, creatinine 1.0 gives 98',
+    run(v) {
+      const female = v.sex === 'f';
+      const kappa = female ? 0.7 : 0.9;
+      const alpha = female ? -0.241 : -0.302;
+      const ratio = v.scr / kappa;
+      const egfr = 142 * Math.pow(Math.min(ratio, 1), alpha) * Math.pow(Math.max(ratio, 1), -1.2)
+                 * Math.pow(0.9938, v.age) * (female ? 1.012 : 1);
+      let category, tone;
+      if (egfr >= 90)      { category = 'G1 – Normal or high';            tone = 'ok'; }
+      else if (egfr >= 60) { category = 'G2 – Mildly decreased';          tone = 'ok'; }
+      else if (egfr >= 45) { category = 'G3a – Mild to moderate decrease'; tone = 'warn'; }
+      else if (egfr >= 30) { category = 'G3b – Moderate to severe decrease'; tone = 'bad'; }
+      else if (egfr >= 15) { category = 'G4 – Severely decreased';        tone = 'bad'; }
+      else                 { category = 'G5 – Kidney failure';            tone = 'bad'; }
+      const key = egfr >= 60 ? 'normal' : egfr >= 30 ? 'reduced' : 'low';
+      return { value: egfr, decimals: 0, unit: 'mL/min/1.73m²', category, tone, key,
+               extras: ['Staging needs persistent values for 3 months plus an albuminuria category.'] };
+    } },
+
+  { id: 'cg', name: 'Creatinine clearance', sub: 'Cockcroft-Gault',
+    fields: [SEX, AGE, WEIGHT, number('scr', 'Serum creatinine', 'mg/dL', 0.1, 20)],
+    formula: 'CrCl = (140 − age) × weight (kg) ÷ (72 × Scr), × 0.85 if female.',
+    limits: ['Adults only. Overestimates clearance in obesity and oedema. Consider ideal or adjusted weight.',
+             'Unreliable in acute kidney injury, the very elderly and low muscle mass.',
+             'This app uses the weight you enter (actual weight). Check each drug label for its preferred method.'],
+    check: 'Male, 40 years, 70 kg, creatinine 1.0 gives 97 mL/min',
+    run(v) {
+      const crcl = (140 - v.age) * v.w / (72 * v.scr) * (v.sex === 'f' ? 0.85 : 1);
+      let category, tone;
+      if (crcl >= 90)      { category = 'Normal';               tone = 'ok'; }
+      else if (crcl >= 60) { category = 'Mildly reduced';       tone = 'ok'; }
+      else if (crcl >= 30) { category = 'Moderately reduced';   tone = 'warn'; }
+      else if (crcl >= 15) { category = 'Severely reduced';     tone = 'bad'; }
+      else                 { category = 'Kidney failure range'; tone = 'bad'; }
+      const key = crcl >= 60 ? 'normal' : crcl >= 30 ? 'reduced' : 'low';
+      return { value: crcl, decimals: 0, unit: 'mL/min', category, tone, key,
+               extras: ['Used to adjust doses of kidney-cleared drugs.'] };
+    } },
+
+  { id: 'ca', name: 'Corrected calcium', sub: 'Albumin adjustment',
+    fields: [number('ca', 'Total calcium', 'mg/dL', 2, 20), number('alb', 'Serum albumin', 'g/dL', 0.5, 7)],
+    formula: 'Corrected Ca = measured Ca + 0.8 × (4.0 − albumin). Normal about 8.5 – 10.5 mg/dL.',
+    limits: ['The correction is an approximation and is unreliable in critical illness and acid-base disorders.',
+             'Ionised calcium is the most accurate test when available.',
+             'Albumin assays differ between laboratories. Use your lab reference range.'],
+    check: 'Calcium 8.0 and albumin 2.0 gives 9.6',
+    run(v) {
+      const corrected = v.ca + 0.8 * (4 - v.alb);
+      let category, tone, key;
+      if (corrected < 8.5)       { category = 'Low (hypocalcaemia)';   tone = 'bad'; key = 'low'; }
+      else if (corrected <= 10.5) { category = 'Normal';               tone = 'ok';  key = 'normal'; }
+      else                       { category = 'High (hypercalcaemia)'; tone = 'bad'; key = 'high'; }
+      return { value: corrected, decimals: 1, unit: 'mg/dL', category, tone, key,
+               extras: [`In mmol/L: <b>${(corrected * 0.2495).toFixed(2)}</b>`] };
+    } },
+
+  { id: 'ag', name: 'Anion gap', sub: 'Acid–base',
+    fields: [number('na', 'Sodium', 'mEq/L', 100, 180, 1), number('cl', 'Chloride', 'mEq/L', 60, 140, 1), number('hco', 'Bicarbonate', 'mEq/L', 2, 50, 1)],
+    formula: 'Anion gap = Na⁺ − (Cl⁻ + HCO₃⁻). Reference about 8 – 12 mEq/L (potassium excluded).',
+    limits: ['Reference ranges depend on the analyser and on whether potassium is included.',
+             'A low albumin lowers the expected gap by about 2.5 mEq/L per 1 g/dL fall, so correct for it.',
+             'Lab error, paraproteins, lithium and bromide can alter the result.'],
+    check: 'Na 140, Cl 104, HCO₃ 24 gives 12',
+    run(v) {
+      const gap = v.na - (v.cl + v.hco);
+      let category, tone, key;
+      if (gap < 8)        { category = 'Low – check albumin and lab error';            tone = 'warn'; key = 'low'; }
+      else if (gap <= 12) { category = 'Normal';                                       tone = 'ok';   key = 'normal'; }
+      else                { category = 'Elevated – consider high anion gap acidosis';  tone = 'bad';  key = 'high'; }
+      return { value: gap, decimals: 0, unit: 'mEq/L', category, tone, key,
+               extras: ['Common causes of a raised gap: lactate, ketones, uraemia, toxins.'] };
+    } },
+
+  { id: 'whr', name: 'Waist-to-hip ratio', sub: 'Abdominal obesity (WHO)',
+    fields: [SEX, number('waist', 'Waist circumference', 'cm', 30, 250), number('hip', 'Hip circumference', 'cm', 40, 250)],
+    formula: 'WHR = waist ÷ hip. WHO: abdominal obesity at WHR 0.90 or more (men) and 0.85 or more (women). Measure the waist midway between the lowest rib and the top of the hip bone, and the hip at its widest part.',
+    limits: ['Adults only, and not valid in pregnancy.',
+             'WHO cut-offs come mainly from European data. Some South Asian guidelines use lower waist limits.',
+             'Measuring errors change the ratio a lot. Measure on bare skin, relaxed, after breathing out.'],
+    check: 'Male, waist 90 cm and hip 100 cm gives 0.90',
+    run(v) {
+      const male = v.sex === 'm';
+      const whr = v.waist / v.hip;
+      const high = whr >= (male ? 0.90 : 0.85);
+      const waistRisk = v.waist >= (male ? 102 : 88) ? 'substantially increased' : v.waist >= (male ? 94 : 80) ? 'increased' : 'not increased';
+      return { value: whr, decimals: 2, unit: 'ratio', category: high ? 'Abdominal obesity' : 'Healthy ratio',
+               tone: high ? 'warn' : 'ok', key: high ? 'high' : 'normal',
+               extras: [`Waist circumference risk: <b>${waistRisk}</b> (WHO cut-offs ${male ? '94 and 102' : '80 and 88'} cm)`] };
+    } },
+
+  { id: 'a1c', name: 'HbA1c & average glucose', sub: 'Diabetes control',
+    fields: [number('a1c', 'HbA1c', '%', 3, 20, 0.1)],
+    formula: 'Estimated average glucose (ADAG study): eAG mg/dL = 28.7 × HbA1c − 46.7. eAG mmol/L = 1.59 × HbA1c − 2.59.',
+    limits: ['Unreliable with anaemia, haemoglobin variants (such as thalassaemia), recent blood loss or transfusion, and in pregnancy.',
+             'One value does not diagnose diabetes. Confirm with a repeat test or fasting glucose.',
+             'Targets differ from person to person. Ask your doctor for your own goal.'],
+    check: 'HbA1c 7.0% gives 154 mg/dL (8.5 mmol/L)',
+    run(v) {
+      const mg = 28.7 * v.a1c - 46.7;
+      const mmol = 1.59 * v.a1c - 2.59;
+      let category, tone, key;
+      if (v.a1c < 5.7)      { category = 'HbA1c: normal range';      tone = 'ok';   key = 'normal'; }
+      else if (v.a1c < 6.5) { category = 'HbA1c: prediabetes range'; tone = 'warn'; key = 'pre'; }
+      else                  { category = 'HbA1c: diabetes range';    tone = 'bad';  key = 'diabetes'; }
+      return { value: mg, decimals: 0, unit: 'mg/dL average glucose', category, tone, key,
+               extras: [`In mmol/L: <b>${mmol.toFixed(1)}</b>`,
+                        'Ranges: below 5.7% normal; 5.7–6.4% prediabetes (ADA); 6.5% or more diabetes (WHO and ADA).'] };
+    } },
+
+  { id: 'edd', name: 'Pregnancy due date', sub: "Naegele's rule",
+    fields: [dateField('lmp', 'First day of last period')],
+    formula: 'Estimated due date = first day of the last menstrual period + 280 days (40 weeks). Gestational age = today minus that date.',
+    limits: ['Assumes a regular 28-day cycle and a reliably remembered date. An early ultrasound dates a pregnancy more accurately.',
+             'A due date is an estimate. Most babies are born between 37 and 42 weeks.',
+             'This is not a pregnancy test. Confirm pregnancy and dates with a health professional.'],
+    check: 'A last period starting on 1 August 2026 gives a due date of 8 May 2027',
+    run(v) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.round((today - v.lmp) / 86400000);
+      if (days < 0) return { error: 'The date cannot be in the future.' };
+      if (days > 301) return { error: 'That date is more than 43 weeks ago. Please check it.' };
+      const due = new Date(v.lmp);
+      due.setDate(due.getDate() + 280);
+      const weeks = Math.floor(days / 7);
+      const late = weeks >= 42;
+      const trimester = weeks < 14 ? 'First trimester' : weeks < 28 ? 'Second trimester' : 'Third trimester';
+      return { value: 0, decimals: 0, display: due.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
+               unit: 'estimated due date', category: late ? 'Past 42 weeks – seek care' : trimester, tone: late ? 'bad' : 'ok', key: 'info',
+               extras: [`Gestational age today: <b>${weeks} weeks ${days % 7} days</b>`, 'Full term is 37 – 42 weeks.'] };
+    } },
+
+  { id: 'qtc', name: 'Corrected QT (QTc)', sub: 'Bazett & Fridericia',
+    fields: [SEX, number('qt', 'QT interval', 'ms', 200, 700, 1), number('hr', 'Heart rate', 'bpm', 30, 220, 1)],
+    formula: 'Bazett: QTc = QT ÷ √RR. Fridericia: QTc = QT ÷ ∛RR. RR = 60 ÷ heart rate (in seconds). Upper normal: 450 ms (men), 460 ms (women).',
+    limits: ['Bazett over-corrects at fast heart rates and under-corrects at slow ones. Fridericia is more accurate then.',
+             'Measure QT by hand in a clear lead. In atrial fibrillation, average several beats.',
+             'A wide QRS (for example bundle branch block) lengthens QT without the same risk.'],
+    check: 'QT 400 ms at heart rate 60 gives QTc 400 ms',
+    run(v) {
+      const rr = 60 / v.hr;
+      const bazett = v.qt / Math.sqrt(rr);
+      const fridericia = v.qt / Math.cbrt(rr);
+      const limit = v.sex === 'm' ? 450 : 460;
+      let category, tone, key;
+      if (bazett >= 500)       { category = 'Markedly prolonged'; tone = 'bad';  key = 'high'; }
+      else if (bazett > limit) { category = 'Prolonged';          tone = 'warn'; key = 'prolonged'; }
+      else                     { category = 'Normal';             tone = 'ok';   key = 'normal'; }
+      return { value: bazett, decimals: 0, unit: 'ms (Bazett)', category, tone, key,
+               extras: [`Fridericia: <b>${Math.round(fridericia)} ms</b>`, `Upper normal limit: <b>${limit} ms</b>`, '500 ms or more carries a higher risk of dangerous heart rhythms.'] };
+    } },
+
+  { id: 'chads', name: 'CHA₂DS₂-VASc', sub: 'Stroke risk in atrial fibrillation',
+    fields: [SEX, AGE, yesNo('chf', 'Heart failure'), yesNo('htn', 'High blood pressure'), yesNo('dm', 'Diabetes'),
+             yesNo('stroke', 'Previous stroke, TIA or clot'), yesNo('vasc', 'Vascular disease (heart attack, PAD)')],
+    formula: 'Points: heart failure 1, hypertension 1, age 75+ 2, diabetes 1, stroke/TIA 2, vascular disease 1, age 65–74 1, female sex 1. ESC 2020 advice is based on the score without the sex point.',
+    limits: ['For adults who already have atrial fibrillation. It does not diagnose it.',
+             'Bleeding risk (for example HAS-BLED) must also be assessed before blood thinners.',
+             'Based on European (ESC) guidelines. The final decision belongs to the treating doctor.'],
+    check: 'Male, 70 years, high blood pressure only, gives 2',
+    run(v) {
+      const female = v.sex === 'f';
+      const age = v.age >= 75 ? 2 : v.age >= 65 ? 1 : 0;
+      const score = age + (female ? 1 : 0) + 2 * Number(v.stroke) + Number(v.chf) + Number(v.htn) + Number(v.dm) + Number(v.vasc);
+      const withoutSex = female ? score - 1 : score;
+      let category, tone, key;
+      if (withoutSex === 0)      { category = 'Low risk';      tone = 'ok';   key = 'low'; }
+      else if (withoutSex === 1) { category = 'Moderate risk'; tone = 'warn'; key = 'consider'; }
+      else                       { category = 'High risk';     tone = 'bad';  key = 'high'; }
+      return { value: score, decimals: 0, unit: 'points', category, tone, key,
+               extras: ['Higher scores mean a higher yearly risk of stroke.'] };
+    } },
+
+  { id: 'conv', name: 'Unit converter', sub: 'Weight, height, labs',
+    fields: [choice('conv', 'Convert', [['kg_lb', 'Weight: kg to lb'], ['lb_kg', 'Weight: lb to kg'], ['cm_in', 'Height: cm to inches and feet'],
+               ['in_cm', 'Height: inches to cm'], ['scr_mg', 'Creatinine: µmol/L to mg/dL'], ['scr_um', 'Creatinine: mg/dL to µmol/L'],
+               ['glu_mg', 'Glucose: mmol/L to mg/dL'], ['glu_mm', 'Glucose: mg/dL to mmol/L'], ['c_f', 'Temperature: °C to °F'], ['f_c', 'Temperature: °F to °C']]),
+             number('val', 'Value', '', -100, 100000)],
+    formula: 'kg × 2.20462 = lb. cm ÷ 2.54 = inches. Creatinine mg/dL × 88.4 = µmol/L. Glucose mmol/L × 18.016 = mg/dL. °F = °C × 9/5 + 32.',
+    limits: ['Always check the unit printed on your laboratory report before using a result in another calculator.',
+             'Results are rounded for easy reading.',
+             'Glucose and creatinine factors are standard values; they are not drug dose conversions.'],
+    check: '5.5 mmol/L glucose gives 99 mg/dL',
+    run(v) {
+      const table = {
+        kg_lb:  [v.val * 2.20462, 'lb', 1],      lb_kg:  [v.val / 2.20462, 'kg', 1],
+        cm_in:  [v.val / 2.54, 'inches', 1],     in_cm:  [v.val * 2.54, 'cm', 1],
+        scr_mg: [v.val / 88.4, 'mg/dL', 2],      scr_um: [v.val * 88.4, 'µmol/L', 0],
+        glu_mg: [v.val * 18.016, 'mg/dL', 0],    glu_mm: [v.val / 18.016, 'mmol/L', 1],
+        c_f:    [v.val * 9 / 5 + 32, '°F', 1],   f_c:    [(v.val - 32) * 5 / 9, '°C', 1]
+      };
+      const [value, unit, decimals] = table[v.conv];
+      const extras = v.conv === 'cm_in' ? [`That is <b>${Math.floor(value / 12)} ft ${(value % 12).toFixed(1)} in</b>`] : ['Check the unit your laboratory uses.'];
+      return { value, decimals, unit, category: 'Converted value', tone: 'ok', key: 'info', extras };
+    } }
+];
+
+/* ---------- 5. ADVICE ----------
+   ADVICE[calculator id][result key] = { source, tips }
+   source 'WHO'     -> advice follows published WHO guidance
+   source 'GENERAL' -> general clinical advice; WHO has no specific guideline for it */
+const SOURCE_TEXT = { WHO: 'Based on WHO guidance', GENERAL: 'General clinical guidance (no specific WHO guideline)' };
+
+// Repeated WHO recommendations, written once
+const WHO_ACTIVITY = 'WHO physical activity advice for adults: 150–300 minutes of moderate activity (such as brisk walking) per week, or 75–150 minutes of vigorous activity, plus muscle-strengthening on 2 or more days. Sit less.';
+const WHO_DIET = 'WHO healthy diet advice: eat at least 400 g (5 portions) of fruit and vegetables a day; keep free sugars below 10% of energy, total fat below 30% (saturated fat below 10%), and salt below 5 g a day.';
+const WHO_HABITS = 'Avoid tobacco and limit alcohol, as WHO advises.';
+const SEE_DOCTOR = 'This is general information, not a diagnosis. See a doctor for advice that fits you.';
+
+const ADVICE = {
+  bmi: {
+    under:  { source: 'WHO', tips: ['Being underweight can come from poor nutrition or an illness. See a doctor or dietitian to find the cause.',
+                                    'Eat regular, balanced meals and snacks with enough protein, fruit, vegetables and whole grains.',
+                                    'Muscle-strengthening exercise helps build healthy weight. ' + WHO_ACTIVITY] },
+    normal: { source: 'WHO', tips: ['Your weight is in the healthy range. Keep it by balancing the energy you eat with the energy you use.', WHO_ACTIVITY, WHO_DIET, WHO_HABITS] },
+    over:   { source: 'WHO', tips: ['Aim for gradual weight loss: eat a little less energy and move more.', WHO_ACTIVITY,
+                                    WHO_DIET, 'Limit sugary drinks, fried food and processed snacks.', WHO_HABITS] },
+    obese:  { source: 'WHO', tips: ['Obesity raises the risk of diabetes, heart disease, high blood pressure and some cancers. See a doctor or dietitian for a personal plan.',
+                                    'Ask about checking blood pressure, blood sugar and cholesterol.',
+                                    'Aim for gradual weight loss: eat less energy and move more.', WHO_ACTIVITY, WHO_DIET, WHO_HABITS] }
+  },
+  bsa: { info: { source: 'GENERAL', tips: ['Clinicians use BSA to calculate doses (for example chemotherapy). Never change a medicine dose yourself.'] } },
+  bmr: { info: { source: 'WHO', tips: ['Weight stays steady when the energy you eat equals the energy you use. More than you use leads to weight gain; less leads to loss.',
+                                        WHO_DIET, WHO_ACTIVITY] } },
+  ibw: { info: { source: 'GENERAL', tips: ['This is a reference weight for clinicians, not a personal target. Use BMI and a health professional to set weight goals.'] } },
+  map: {
+    low:        { source: 'GENERAL', tips: ['A low MAP can mean organs are not getting enough blood. Get medical help urgently if you feel dizzy, faint, confused or short of breath.',
+                                            'If you take blood pressure medicine, do not stop or change it without asking your doctor.'] },
+    borderline: { source: 'GENERAL', tips: ['Rest seated for 5 minutes and measure again with the right cuff size.', 'If readings stay low or you have symptoms, see a doctor.'] },
+    normal:     { source: 'WHO', tips: ['Your MAP is in the normal range. To keep blood pressure healthy, WHO advises less salt (below 5 g a day), a diet rich in fruit and vegetables, regular activity, no tobacco and limited alcohol.'] },
+    high:       { source: 'WHO', tips: ['WHO defines hypertension in adults as blood pressure of 140/90 mmHg or higher on repeated measurements. Confirm with readings on different days.',
+                                        'Cut salt to below 5 g a day, eat plenty of fruit and vegetables, stay active, reach a healthy weight, avoid tobacco and limit alcohol.',
+                                        'Take prescribed medicines regularly and see a doctor for diagnosis and treatment.',
+                                        'Seek emergency care for chest pain, severe headache, weakness or trouble speaking.'] }
+  },
+  egfr: {
+    normal:  { source: 'GENERAL', tips: ['Kidney function looks adequate. With diabetes, high blood pressure or family kidney disease, have it checked every year.',
+                                         'Protect your kidneys: stay active, limit salt, drink enough water and avoid tobacco.'] },
+    reduced: { source: 'GENERAL', tips: ['Repeat the test and check urine albumin to confirm chronic kidney disease.',
+                                         'Keep blood pressure and blood sugar under control and limit salt.',
+                                         'Avoid regular painkillers such as ibuprofen or diclofenac unless a doctor advises them.',
+                                         'Ask a doctor or pharmacist to review your medicines for kidney dosing.'] },
+    low:     { source: 'GENERAL', tips: ['See a doctor soon, ideally a kidney specialist.',
+                                         'Avoid regular painkillers such as ibuprofen or diclofenac unless a doctor advises them.',
+                                         'Seek urgent care for swelling, breathlessness, very little urine or confusion.'] }
+  },
+  cg: {
+    normal:  { source: 'GENERAL', tips: ['Usual doses of most medicines apply, but always follow the drug label.'] },
+    reduced: { source: 'GENERAL', tips: ['Some medicines need a lower dose. Ask a doctor or pharmacist before taking or changing any.'] },
+    low:     { source: 'GENERAL', tips: ['Many medicines need dose changes or should be avoided. Ask a doctor or pharmacist before taking any, and see a doctor about your kidneys.'] }
+  },
+  ca: {
+    low:    { source: 'GENERAL', tips: ['Low calcium can cause cramps, tingling or spasms. See a doctor to find the cause (for example low vitamin D, parathyroid or kidney problems).',
+                                        'Do not start high-dose calcium or vitamin D supplements without medical advice.',
+                                        'Seek urgent care for seizures, severe cramps or an irregular heartbeat.'] },
+    normal: { source: 'GENERAL', tips: ['Calcium is normal. Calcium comes from dairy foods, leafy greens and small fish with bones; vitamin D comes from sunlight and food.'] },
+    high:   { source: 'GENERAL', tips: ['High calcium needs medical evaluation. Common causes include overactive parathyroid glands, some cancers and too much vitamin D.',
+                                        'Stop calcium and vitamin D supplements until a doctor advises, and drink enough fluids unless told to limit them.',
+                                        'Seek urgent care for confusion, severe thirst, vomiting or abdominal pain.'] }
+  },
+  ag: {
+    low:    { source: 'GENERAL', tips: ['A low gap is often caused by low albumin or a lab error. Repeat the test and check albumin.'] },
+    normal: { source: 'GENERAL', tips: ['The gap is normal. Interpret it with the clinical picture and other tests.'] },
+    high:   { source: 'GENERAL', tips: ['A raised gap suggests acid build-up, for example from diabetic ketoacidosis, lactic acidosis, kidney failure or toxins. It needs urgent assessment with blood gas, glucose, lactate, ketones and kidney tests.',
+                                        'Seek urgent care if the person is unwell, vomiting, breathing fast or confused.'] }
+  }
+};
+
+// Advice for the newer calculators
+Object.assign(ADVICE, {
+  whr: {
+    normal: { source: 'WHO', tips: ['Your waist-to-hip ratio is in the healthy range. Keep it there with regular activity and a healthy diet.', WHO_ACTIVITY, WHO_DIET] },
+    high:   { source: 'WHO', tips: ['Fat around the waist raises the risk of diabetes, heart disease and high blood pressure, even when BMI is normal.',
+                                    'Reduce waist size gradually: be more active, eat fewer sugary and fatty foods and avoid tobacco.', WHO_ACTIVITY, WHO_DIET,
+                                    'Ask a doctor to check your blood pressure, blood sugar and cholesterol.'] }
+  },
+  a1c: {
+    normal:   { source: 'WHO', tips: ['Your HbA1c is in the normal range. To prevent type 2 diabetes, WHO advises a healthy diet, regular activity, a healthy weight and no tobacco.', WHO_ACTIVITY, WHO_DIET] },
+    pre:      { source: 'WHO', tips: ['Prediabetes means a higher risk of type 2 diabetes. A healthy diet, regular activity and gradual weight loss can prevent or delay it.', WHO_ACTIVITY, WHO_DIET,
+                                     'See a doctor for a fasting glucose test or a repeat HbA1c, and have it checked at least once a year.'] },
+    diabetes: { source: 'WHO', tips: ['An HbA1c in the diabetes range needs confirming with a repeat test. See a doctor soon.',
+                                     'WHO advises a healthy diet, regular activity, a healthy weight and no tobacco. Many people also need medicines; take them as prescribed.',
+                                     'Have your blood pressure, cholesterol, eyes, feet and kidneys checked regularly.',
+                                     'Seek urgent care for extreme thirst, vomiting, fast breathing, drowsiness or confusion.'] }
+  },
+  edd: { info: { source: 'WHO', tips: ['WHO recommends at least 8 antenatal contacts with a health professional, starting in the first 12 weeks.',
+                                        'WHO recommends daily iron (30–60 mg) and folic acid (400 µg) for pregnant women. Ask a doctor or midwife what suits you.',
+                                        'Eat a healthy, varied diet, stay active as advised, and avoid tobacco, alcohol and drugs.',
+                                        'Go to a health facility urgently for vaginal bleeding, severe headache or blurred vision, fever, severe belly pain, fits, leaking fluid or less baby movement.'] } },
+  qtc: {
+    normal:    { source: 'GENERAL', tips: ['QTc is within the normal limit. If you faint or have unexplained palpitations, see a doctor.'] },
+    prolonged: { source: 'GENERAL', tips: ['Tell your doctor or pharmacist about every medicine you take. Some antibiotics, antipsychotics and anti-sickness drugs can lengthen QT.',
+                                           'Low potassium, magnesium or calcium make it worse. Ask for blood tests.', 'Repeat the ECG and see a doctor.'] },
+    high:      { source: 'GENERAL', tips: ['A QTc of 500 ms or more raises the risk of a dangerous heart rhythm. Get an urgent medical review.',
+                                           'Do not start new medicines that lengthen QT. Seek emergency care for fainting, seizures or a racing heartbeat.'] }
+  },
+  chads: {
+    low:      { source: 'GENERAL', tips: ['Blood thinners are usually not needed at this score. Keep blood pressure, sugar and weight under control and review your risk each year.'] },
+    consider: { source: 'GENERAL', tips: ['Discuss with your doctor whether a blood thinner is right for you. The doctor will weigh stroke risk against bleeding risk.'] },
+    high:     { source: 'GENERAL', tips: ['A blood thinner (oral anticoagulant) is usually recommended to prevent stroke. Do not start or stop it without your doctor.',
+                                          'Call emergency services for sudden face drooping, arm weakness or speech difficulty.'] }
+  }
+});
+
+/* ---------- 6. HOME SCREEN, NAVIGATION & FORMS ---------- */
+const home = $('#home');
+const panel = $('#panel');
+let current = 0;   // index of the calculator being shown
+
+// Groups on the home screen. items: calculator id -> short badge text
+const CATEGORIES = [
+  { name: 'Body & nutrition',       colour: '#0F8B8D', items: { bmi: 'BMI', whr: 'WHR', bmr: 'BMR', ibw: 'IBW', bsa: 'BSA' } },
+  { name: 'Heart & blood pressure', colour: '#C0392B', items: { map: 'MAP', qtc: 'QTc', chads: 'CHA₂' } },
+  { name: 'Kidney & blood tests',   colour: '#5B5BD6', items: { egfr: 'eGFR', cg: 'CrCl', ca: 'Ca', ag: 'AG' } },
+  { name: 'Diabetes',               colour: '#A8660A', items: { a1c: 'A1c' } },
+  { name: 'Pregnancy',              colour: '#C2447A', items: { edd: 'EDD' } },
+  { name: 'Handy tools',            colour: '#5B7280', items: { conv: '⇄' } }
+];
+
+// Draw the calculator cards, grouped by category
+function buildHome() {
+  $('#cats').innerHTML = CATEGORIES.map((cat) => `
+    <section class="cat" style="--cat:${cat.colour}">
+      <h2 class="cat-title">${cat.name}</h2>
+      <div class="cards">${Object.keys(cat.items).map((id) => {
+        const calc = CALCULATORS.find((c) => c.id === id);
+        const text = `${calc.name} ${calc.sub} ${cat.name}`.toLowerCase();
+        return `<button class="card" type="button" data-id="${id}" data-text="${text}">
+          <span class="badge">${cat.items[id]}</span><span><b>${calc.name}</b><small>${calc.sub}</small></span></button>`;
+      }).join('')}</div>
+    </section>`).join('') + '<p class="no-results" id="no-results" hidden>No calculator found. Try another word, such as "kidney" or "pregnancy".</p>';
+}
+
+// Search box: hide the cards that do not match what was typed
+$('#search').oninput = (event) => {
+  const query = event.target.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('.card').forEach((card) => {
+    const match = card.dataset.text.includes(query);
+    card.hidden = !match;
+    if (match) shown++;
+  });
+  document.querySelectorAll('.cat').forEach((section) => { section.hidden = !section.querySelector('.card:not([hidden])'); });
+  $('#no-results').hidden = shown > 0;
+};
+$('#cats').onclick = (event) => {
+  const card = event.target.closest('.card');
+  if (card) go(card.dataset.id);
+};
+
+// Navigation: the address (#bmi, #a1c ...) decides which screen is shown, so the browser Back button works
+function showHome() { panel.hidden = true; home.hidden = false; window.scrollTo(0, 0); }
+function route() {
+  const index = CALCULATORS.findIndex((c) => c.id === location.hash.slice(1));
+  if (index >= 0) showCalculator(index); else showHome();
+}
+function go(id) {
+  try { location.hash = id; } catch (e) { /* address change not allowed here */ }
+  route();
+}
+window.addEventListener('hashchange', route);
+
+// Draw one input box (number) or drop-down list (choice)
+function fieldHTML(f) {
+  if (f.type === 'date') {
+    return `<div class="field"><label for="${f.id}">${f.label}</label><input id="${f.id}" type="date" max="${new Date().toISOString().slice(0, 10)}"></div>`;
+  }
+  if (f.options) {
+    const options = f.options.map(([value, text]) => `<option value="${value}">${text}</option>`).join('');
+    return `<div class="field"><label for="${f.id}">${f.label}</label><select id="${f.id}">${options}</select></div>`;
+  }
+  return `<div class="field"><label for="${f.id}">${f.label}</label>
+    <input id="${f.id}" type="number" inputmode="decimal" step="${f.step}" min="${f.min}" max="${f.max}" placeholder="${f.min} – ${f.max}" autocomplete="off">
+    <span class="unit">${f.unit}</span></div>`;
+}
+
+// Show the form for the chosen calculator
+function showCalculator(index) {
+  current = index;
+  const calc = CALCULATORS[index];
+  home.hidden = true;
+  panel.hidden = false;
+  window.scrollTo(0, 0);
+
+  panel.innerHTML = `
+    <button type="button" class="back" id="back-btn">← All calculators</button>
+    <h2>${calc.name}</h2>
+    <p class="sub">${calc.sub}</p>
+    <form id="form" novalidate>
+      <div class="grid">${calc.fields.map(fieldHTML).join('')}</div>
+      <div class="buttons">
+        <button class="go" type="submit">Calculate</button>
+        <button class="clear" type="reset">Clear</button>
+      </div>
+      <div id="out"></div>
+      <div class="formula"><b>Formula:</b> ${calc.formula}</div>
+      <div class="limits"><b>Limitations</b>
+        <ul>${calc.limits.map((text) => `<li>${text}</li>`).join('')}</ul>
+        <div class="check"><b>Quick check:</b> ${calc.check}</div>
+      </div>
+    </form>`;
+
+  $('#back-btn').onclick = () => go('');
+  $('#form').onsubmit = (event) => { event.preventDefault(); calculate(); };
+  $('#form').onreset = () => { $('#out').innerHTML = ''; };
+}
+
+/* ---------- 7. CALCULATING & SHOWING RESULTS ---------- */
+const PULSE = 'M0 45H70L80 45L90 25L100 65L112 5L124 45H170C178 45 180 36 188 36C196 36 198 45 206 45H300';
+
+function showError(message, input) {
+  $('#out').innerHTML = `<p class="error" role="alert">${message}</p>`;
+  if (input) input.focus();
+}
+
+function calculate() {
+  const calc = CALCULATORS[current];
+  const values = {};
+
+  // Step 1: read and check every input
+  for (const f of calc.fields) {
+    const input = document.getElementById(f.id);
+    if (f.type === 'date') {
+      if (!input.value) return showError(`${f.label} is required. Choose a date.`, input);
+      values[f.id] = new Date(input.value + 'T00:00:00');
+      continue;
+    }
+    if (f.options) { values[f.id] = input.value; continue; }
+    const x = parseFloat(input.value);
+    if (isNaN(x)) return showError(`${f.label} is required. Enter a number.`, input);
+    if (x < f.min || x > f.max) return showError(`${f.label} must be between ${f.min} and ${f.max} ${f.unit}.`, input);
+    values[f.id] = x;
+  }
+
+  // Step 2: do the maths
+  const result = calc.run(values);
+  if (result.error) return showError(result.error);
+
+  // Step 3: show the monitor result and the advice
+  const colour = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)' }[result.tone];
+  let html = `<div class="res" style="--c:${colour}">
+      <div class="big"><span id="num">${result.display || '0'}</span><small>${result.unit}</small></div>
+      <span class="tag">${result.category}</span>
+      <svg class="trace" viewBox="0 0 300 80" aria-hidden="true"><path class="base" d="${PULSE}"/><path class="sweep" pathLength="100" d="${PULSE}"/></svg>`;
+
+  if (result.bar) {   // colour scale for BMI (15 to 40)
+    const percent = Math.max(0, Math.min(100, (result.bar - 15) / 25 * 100));
+    html += `<div class="bar"><i style="left:0" data-percent="${percent}"></i></div>
+      <div class="bar-labels"><span>15</span><span>18.5</span><span>25</span><span>30</span><span>35</span><span>40+</span></div>`;
+  }
+  html += `<ul>${result.extras.map((text) => `<li>${text}</li>`).join('')}</ul></div>`;
+  html += adviceHTML(calc.id, result.key);
+  html += actionsHTML();
+  lastResult = { calc, result };
+
+  const out = $('#out');
+  out.innerHTML = html;
+  if (!result.display) animateNumber($('#num'), result.value, result.decimals);
+  saveHistory(calc, result);
+  const marker = out.querySelector('i[data-percent]');
+  if (marker) setTimeout(() => { marker.style.left = marker.dataset.percent + '%'; }, 50);
+  out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Build the "What you can do" box for this result
+function adviceHTML(id, key) {
+  const advice = ADVICE[id] && ADVICE[id][key];
+  if (!advice) return '';
+  return `<div class="advice">
+      <h3>What you can do</h3>
+      <span class="source">${SOURCE_TEXT[advice.source]}</span>
+      <ul>${advice.tips.map((tip) => `<li>${tip}</li>`).join('')}</ul>
+      <p class="disclaimer">${SEE_DOCTOR}</p>
+    </div>`;
+}
+
+// Count the number up from 0 to the result
+function animateNumber(element, target, decimals) {
+  let start = null;
+  function step(time) {
+    if (start === null) start = time;
+    const progress = Math.min(1, (time - start) / 600);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    element.textContent = (target * eased).toFixed(decimals);
+    if (progress < 1) requestAnimationFrame(step);
+    else element.textContent = target.toFixed(decimals);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ---------- 7b. SAVING RESULTS, PRINT & COPY ---------- */
+const HISTORY_KEY = 'medicalc-history';
+let memoryHistory = [];     // used if the browser blocks saving
+let lastResult = null;      // the result on screen, for the Copy button
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch (e) { return memoryHistory; }
+}
+function storeHistory(list) {
+  memoryHistory = list;
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); } catch (e) { /* saving not allowed */ }
+}
+const shownValue = (r) => r.display || r.value.toFixed(r.decimals);
+
+function saveHistory(calc, r) {
+  const list = loadHistory();
+  list.unshift({ t: Date.now(), name: calc.name, text: `${shownValue(r)} ${r.unit}`, cat: r.category, tone: r.tone });
+  storeHistory(list.slice(0, 30));
+}
+
+function actionsHTML() {
+  return `<div class="result-actions">
+      <button class="clear" type="button" id="print-btn">Print or save as PDF</button>
+      <button class="clear" type="button" id="copy-btn">Copy summary</button>
+      <span id="copy-note" role="status"></span>
+    </div>`;
+}
+
+panel.addEventListener('click', async (event) => {
+  if (event.target.id === 'print-btn') window.print();
+  if (event.target.id === 'copy-btn' && lastResult) {
+    const r = lastResult.result;
+    const text = `MediCalc – ${lastResult.calc.name}\n${shownValue(r)} ${r.unit} (${r.category})\n${new Date().toLocaleString()}`;
+    try { await navigator.clipboard.writeText(text); $('#copy-note').textContent = 'Copied.'; }
+    catch (e) { $('#copy-note').textContent = 'Copy is not available here. Use Print instead.'; }
+  }
+});
+
+function renderHistory() {
+  const colours = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)' };
+  const list = loadHistory();
+  $('#hist-list').innerHTML = list.length
+    ? list.map((item) => `<li style="border-left-color:${colours[item.tone]}">
+        <div><b>${item.name}</b><small>${new Date(item.t).toLocaleString()}</small></div>
+        <div style="text-align:right"><b>${item.text}</b><small>${item.cat}</small></div></li>`).join('')
+    : '<li>No results yet. Calculate something and it will appear here.</li>';
+}
+
+const histWindow = $('#hist-window');
+const openHist = () => { renderHistory(); histWindow.classList.add('open'); $('#hist-close').focus(); };
+const closeHist = () => { histWindow.classList.remove('open'); $('#hist-btn').focus(); };
+$('#hist-btn').onclick = openHist;
+$('#hist-close').onclick = closeHist;
+$('#hist-clear').onclick = () => { storeHistory([]); renderHistory(); };
+histWindow.onclick = (event) => { if (event.target === histWindow) closeHist(); };
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && histWindow.classList.contains('open')) closeHist(); });
+
+/* ---------- 8. THEME, HELP WINDOW, SPLASH, START ---------- */
+// Theme: starts from the device setting, the button switches it
+const root = document.documentElement;
+root.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+$('#theme-btn').onclick = () => { root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; };
+
+// Text size: each press makes the text larger (normal, large, extra large), then back to normal
+let sizeStep = 0;
+try { sizeStep = Number(localStorage.getItem('medicalc-size')) || 0; } catch (e) { /* not saved */ }
+const applySize = () => { root.dataset.size = sizeStep; $('#size-btn').textContent = ['Aa', 'Aa+', 'Aa++'][sizeStep]; };
+$('#size-btn').onclick = () => {
+  sizeStep = (sizeStep + 1) % 3;
+  try { localStorage.setItem('medicalc-size', sizeStep); } catch (e) { /* not saved */ }
+  applySize();
+};
+applySize();
+
+// Help window: open with the ? button; close with Close, a click outside, or Esc
+const helpWindow = $('#help-window');
+const openHelp = () => { helpWindow.classList.add('open'); $('#help-close').focus(); };
+const closeHelp = () => { helpWindow.classList.remove('open'); $('#help-btn').focus(); };
+$('#help-btn').onclick = openHelp;
+$('#help-close').onclick = closeHelp;
+helpWindow.onclick = (event) => { if (event.target === helpWindow) closeHelp(); };
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && helpWindow.classList.contains('open')) closeHelp(); });
+
+// Splash: hides after 3.4 seconds, or when tapped
+const splash = $('#splash');
+const hideSplash = () => splash.classList.add('out');
+splash.onclick = hideSplash;
+setTimeout(hideSplash, 3400);
+
+// Start the app
+buildHome();
+route();
+</script>
+</body>
+</html>
